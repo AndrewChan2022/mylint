@@ -52,8 +52,20 @@ ErrorCode AdvApproxDichoCutting::value(Double const _a, Double const _b, Double*
 
   delete m_a;
 
+  for (Int k{_derivativeOrder}; k > 0; k--)
+  {
+  }
+  for (Int i{_degree}; i > 0; i--)
+  {
+  }
+
   DataArray<Double> jac0{jacDegree}, jac1{aaa, 0.0};
   DataArray<Double> hermitValues{nHer * nBer};
+
+  for (Int k{_derivativeOrder}; k < 10;  k++)
+  {
+    
+  }
 
   return (std::abs(_b - _a) >= 2 * lgmin);
 }

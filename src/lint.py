@@ -407,7 +407,7 @@ def _extract_func_name(line: str) -> str | None:
             return None
         return method_name
     m = re.match(
-        r'^(?:(?:static|constexpr|const|volatile|inline|virtual|explicit)\s+)*'
+        r'^(?:(?:static|constexpr|const|volatile|inline|virtual|explicit|[A-Z_][A-Z_0-9]*)\s+)*'
         r'(\w+(?:::\w+)*[*&\s]*)\s+(\w+)\s*\(',
         s
     )
@@ -446,7 +446,7 @@ def check_rule7_return_type(line: str, lineno: int, raw_line: str) -> list:
     s = line.strip()
     # Match: [qualifiers] returnType funcName(
     m = re.match(
-        r'^(?:(?:static|constexpr|const|volatile|inline|virtual|explicit)\s+)*'
+        r'^(?:(?:static|constexpr|const|volatile|inline|virtual|explicit|[A-Z_][A-Z_0-9]*)\s+)*'
         r'(\w+)\s+(?:\w+\s*::\s*~?\s*)?\w+\s*\(',
         s
     )
@@ -495,6 +495,43 @@ def check_rule6_brace_init(line: str, lineno: int, raw_line: str) -> list:
         return issues
     stripped = line.strip()
     if stripped.startswith('return ') or stripped.startswith('using '):
+        return issues
+
+    # Check 0: for-loop init  for (Type var = value; ...)
+    for_m = re.match(r'^for\s*\(\s*(.+?)\s*;', stripped)
+    if for_m:
+        init_part = for_m.group(1).strip()
+        if '=' in init_part:
+            has_compound = False
+            for op in ('==', '!=', '<=', '>=', '+=', '-=', '*=', '/=', '%=', '&=',
+                       '|=', '^=', '<<=', '>>=', '=>'):
+                if op in init_part:
+                    has_compound = True
+                    break
+            if not has_compound:
+                im = re.match(
+                    r'^(?:(?:static|constexpr|const|volatile|inline)\s+)*'
+                    r'(\w+(?:::\w+)*(?:<[^>]*>)?)\s+'
+                    r'(\w+)\s*'
+                    r'=\s*'
+                    r'(.+)',
+                    init_part
+                )
+                if im:
+                    var_name = im.group(2)
+                    value = im.group(3).strip()
+                    if '{' not in value:
+                        name_col = _find_token(raw_line, var_name)
+                        eq_col = raw_line.find('=', name_col + len(var_name) if name_col >= 0 else 0)
+                        if eq_col < 0:
+                            eq_col = 0
+                        semi_col = raw_line.find(';', eq_col)
+                        span = (semi_col - eq_col) if semi_col > eq_col else len(value) + 2
+                        issues.append(
+                            (lineno, eq_col, span,
+                             f"Rule 6: use brace initialization — "
+                             f"`{var_name}{{{value}}}` instead of `{var_name} = {value}`")
+                        )
         return issues
 
     # Check 1: assignment init  Type var = value;
@@ -896,7 +933,7 @@ def _is_function_decl(line: str) -> bool:
     # Must have a return type before the function name (declaration, not call)
     # Pattern: [qualifiers] returnType [Class::]funcName(params)
     m = re.match(
-        r'^(?:(?:static|constexpr|const|volatile|inline|virtual|explicit)\s+)*'
+        r'^(?:(?:static|constexpr|const|volatile|inline|virtual|explicit|[A-Z_][A-Z_0-9]*)\s+)*'
         r'\w+(?:::\w+)*[*&\s]+'           # return type
         r'(?:\w+\s*::\s*~?\s*)?'           # optional Class:: prefix
         r'\w+\s*\(',

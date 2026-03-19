@@ -34,4 +34,9 @@ private:
   Int Size;
 };
 
+static FORCE_INLINE Int Index2dScalar(Int _row, Int _col, Int _nCol)
+{
+}
+
+
 #endif // _AdvApprox_DichoCutting_HeaderFile

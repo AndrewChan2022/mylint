@@ -79,5 +79,9 @@ others:
 15: bug: DataArray<Double> jac0(jacDegree), jac1(aaa);
 16: bug: delete m_jacobi;
 17: constexpr variable can start with upper case
+18: miss:  static FORCE_INLINE Int index2dScalar(Int _row, Int _col, Int _nCol)
+        => static FORCE_INLINE Int index2dScalar(Int const _row, Int const _col, Int const _nCol)
+19: miss: for (Int k = _derivativeOrder; k > ...);  
+    =>  for (Int k{_derivativeOrder}; k > ...);  
 ```
 

@@ -51,8 +51,20 @@ bool AdvApprox_DichoCutting::Value(const double a, const double b, double& cutti
 
   delete m_a;
 
+  for (Int k = _derivativeOrder; k > 0; k--)
+  {
+  }
+  for (Int i = _degree; i > 0; i--)
+  {
+  }
+
   DataArray<Double> jac0(jacDegree), jac1(aaa);
   DataArray<Double> hermitValues(nHer * nBer);
+
+  for (Int k = _derivativeOrder; k < 10;  k++)
+  {
+    
+  }
 
   return (std::abs(b - a) >= 2 * lgmin);
 }
