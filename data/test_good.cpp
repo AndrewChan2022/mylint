@@ -9,8 +9,8 @@ ErrorCode AdvApproxDichoCutting::value(Double const _a, Double const _b, Double*
   constexpr double lgmin{10 * Precision::PConfusion()};
   _cuttingValue           = (_a + _b) / 2;
 
-  Int aaa;
-  Int bbb;
+  Int aaa{};
+  Int bbb{};
   testFunc(aaa, bbb);
   DataArray<Double> uCurve{len};
   DataArray<Double> vCurve{getCurve()};
@@ -27,8 +27,8 @@ ErrorCode AdvApproxDichoCutting::value(Double const _a, Double const _b, Double*
   DataArray<Double> uCurve2{10};
   DataArray<Double> uCurve{udim * (_uDerivOrder + 1)};
 
-  Int cnt;
-  Int myVvalue;
+  Int cnt{};
+  Int myVvalue{};
 
   Int a{0};
   switch (a)
@@ -67,5 +67,15 @@ ErrorCode AdvApproxDichoCutting::value(Double const _a, Double const _b, Double*
     
   }
 
-  return (std::abs(_b - _a) >= 2 * lgmin);
+  Int order[2]{FirstOrder + 1, LastOrder + 1};
+  Int arr[3]{};
+
+  Int aaa{};
+
+  for (idim{0}; idim < _dim; idim++)
+  {
+    
+  }
+
+  return (Math::abs(_b - _a) >= 2 * lgmin);
 }

@@ -83,5 +83,29 @@ others:
         => static FORCE_INLINE Int index2dScalar(Int const _row, Int const _col, Int const _nCol)
 19: miss: for (Int k = _derivativeOrder; k > ...);  
     =>  for (Int k{_derivativeOrder}; k > ...);  
+20. std::fabs(10.0f);  should Math::abs(10.0f)
+21. false should be False
+22. Int order[2] = {FirstOrder + 1, LastOrder + 1};
+    => Int order[2]{FirstOrder + 1, LastOrder + 1};
+23. Int order[2] 
+    => 
+    Int order[2]{}
+24. for (Int Col{1}; Col < nCol - 1; Col++)
+    =>
+    for (Int col{1}; col < nCol - 1; col++)
+25. 
+    template ErrorCode PolynomialCalculation::noDerivativeEvalPolynomial<3>(
+        Double const _u, Int const _degree) noexcept;
+    Double errorly judge as variable
+26.
+     _u1 * _coeffs[indc * DIM + d]
+      _coeffs errorly judge as should _Coeffs, but it is already little camel
+27. Int temp;
+    Int temp{};;
+28. miss:
+    for (idim = 0; idim < _dim; idim++)
+    =>
+    for (idim{0}; idim < _dim; idim++)
+    
 ```
 

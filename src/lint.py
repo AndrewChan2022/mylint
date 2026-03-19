@@ -16,6 +16,8 @@ Rules:
   12. Between `//` and comment content, exactly one space (no tab, no extra spaces).
   13. Class data members of plain old types must be initialized.
   14. Output pointer parameters must have `const` on the pointer (e.g. `Type* const _out`).
+  15. Use `Math::abs` instead of `std::fabs`.
+  16. Use `False` instead of `false`.
 """
 
 import re
@@ -99,6 +101,38 @@ def check_rule10_no_tabs(raw_line: str, lineno: int) -> list:
                 (lineno, i, 1, "Rule 10: use spaces instead of tabs")
             )
             break  # one issue per line is enough
+    return issues
+
+
+def check_rule15_std_fabs(line: str, lineno: int, raw_line: str) -> list:
+    """Rule 15: use Math::abs instead of std::fabs."""
+    issues = []
+    if _is_preprocessor(raw_line):
+        return issues
+    for m in re.finditer(r'\bstd::fabs\b', line):
+        col = _find_token(raw_line, 'std::fabs', m.start())
+        if col < 0:
+            col = m.start()
+        issues.append(
+            (lineno, col, len('std::fabs'),
+             "Rule 15: use `Math::abs` instead of `std::fabs`")
+        )
+    return issues
+
+
+def check_rule16_false(line: str, lineno: int, raw_line: str) -> list:
+    """Rule 16: use False instead of false."""
+    issues = []
+    if _is_preprocessor(raw_line):
+        return issues
+    for m in re.finditer(r'\bfalse\b', line):
+        col = _find_token(raw_line, 'false', m.start())
+        if col < 0:
+            col = m.start()
+        issues.append(
+            (lineno, col, len('false'),
+             "Rule 16: use `False` instead of `false`")
+        )
     return issues
 
 
@@ -534,6 +568,45 @@ def check_rule6_brace_init(line: str, lineno: int, raw_line: str) -> list:
                         )
         return issues
 
+    # Check array: Type name[N] = {...}; => Type name[N]{...};
+    #              Type name[N]; => Type name[N]{};
+    arr_m = re.match(
+        r'^(?:(?:static|constexpr|const|volatile|inline)\s+)*'
+        r'(\w+(?:::\w+)*(?:<[^>]*>)?)\s+'  # type
+        r'(\w+)\s*(\[[^\]]*\])\s*'          # varName[size]
+        r'(?:=\s*(\{.*?\}))?\s*;',          # optional = {...}
+        stripped
+    )
+    if arr_m:
+        var_name = arr_m.group(2)
+        bracket = arr_m.group(3)
+        init_val = arr_m.group(4)
+        if init_val:
+            # Has = {...}, should drop the =
+            eq_col = raw_line.find('=', _find_token(raw_line, bracket[-1]) or 0)
+            if eq_col < 0:
+                eq_col = 0
+            semi_col = raw_line.find(';', eq_col)
+            span = (semi_col - eq_col) if semi_col > eq_col else len(init_val) + 2
+            issues.append(
+                (lineno, eq_col, span,
+                 f"Rule 6: use brace initialization — "
+                 f"`{var_name}{bracket}{init_val}` instead of "
+                 f"`{var_name}{bracket} = {init_val}`")
+            )
+        else:
+            # No initializer, needs {}
+            name_col = _find_token(raw_line, var_name)
+            bracket_end = raw_line.find(']', name_col if name_col >= 0 else 0)
+            if bracket_end < 0:
+                bracket_end = 0
+            issues.append(
+                (lineno, bracket_end + 1, 1,
+                 f"Rule 6: array `{var_name}{bracket}` must be initialized — "
+                 f"e.g. `{var_name}{bracket}{{}}`")
+            )
+        return issues
+
     # Check 1: assignment init  Type var = value;
     if '=' in stripped:
         has_compound = False
@@ -649,6 +722,34 @@ def check_rule6_brace_init(line: str, lineno: int, raw_line: str) -> list:
                          f"`{var_name}{{{args}}}` instead of `{var_name}({args})`")
                     )
 
+    # Check 3: uninitialized POD-type variable: Type var;  =>  Type var{};
+    # Match simple declarations without = or { or (
+    _POD_TYPES = {'Int', 'Double', 'Bool', 'int', 'double', 'bool', 'float', 'char',
+                  'short', 'long', 'unsigned', 'signed', 'size_t'}
+    if '=' not in stripped and '{' not in stripped and '(' not in stripped:
+        m = re.match(
+            r'^(?:(?:static|constexpr|const|volatile|inline)\s+)*'
+            r'(\w+(?:::\w+)*(?:<[^>]*>)?)\s+'  # type
+            r'(\w+)\s*;',                        # varName;
+            stripped
+        )
+        if m:
+            type_name = m.group(1)
+            var_name = m.group(2)
+            # Only flag POD types (not class types which have constructors)
+            if type_name in _POD_TYPES:
+                name_col = _find_token(raw_line, var_name)
+                if name_col < 0:
+                    name_col = 0
+                semi_col = raw_line.find(';', name_col)
+                if semi_col < 0:
+                    semi_col = name_col + len(var_name)
+                issues.append(
+                    (lineno, semi_col, 1,
+                     f"Rule 6: variable `{var_name}` must be initialized — "
+                     f"e.g. `{type_name} {var_name}{{}}`")
+                )
+
     return issues
 
 
@@ -676,8 +777,45 @@ def check_rule8_local_var_naming(line: str, lineno: int, raw_line: str) -> list:
     # Skip lines that are not variable declarations
     if stripped.startswith('return ') or stripped.startswith('using '):
         return issues
-    # Skip control flow
-    for kw in ('if', 'for', 'while', 'switch', 'catch', 'else', 'case',
+    # Handle for-loop init variable: for (Type varName ...; ...)
+    for_m = re.match(r'^for\s*\(\s*', stripped)
+    if for_m:
+        init_part = stripped[for_m.end():]
+        # Extract up to first semicolon at depth 0
+        semi_idx = init_part.find(';')
+        if semi_idx >= 0:
+            init_stmt = init_part[:semi_idx].strip()
+            vm = re.match(
+                r'^(?:(?:static|constexpr|const|volatile|inline)\s+)*'
+                r'(\w+(?:::\w+)*(?:<[^>]*>)?)\s+'
+                r'(\w+)',
+                init_stmt
+            )
+            if vm:
+                var_name = vm.group(2)
+                if var_name[0].isupper():
+                    col = _find_token(raw_line, var_name)
+                    if col < 0:
+                        col = 0
+                    issues.append(
+                        (lineno, col, len(var_name),
+                         f"Rule 8: variable `{var_name}` should start with "
+                         f"lowercase (e.g. `{var_name[0].lower() + var_name[1:]}`)")
+                    )
+                elif '_' in var_name:
+                    parts = var_name.split('_')
+                    camel = parts[0] + ''.join(p.capitalize() for p in parts[1:] if p)
+                    col = _find_token(raw_line, var_name)
+                    if col < 0:
+                        col = 0
+                    issues.append(
+                        (lineno, col, len(var_name),
+                         f"Rule 8: variable `{var_name}` should be lowerCamelCase "
+                         f"(e.g. `{camel}`)")
+                    )
+        return issues
+    # Skip other control flow
+    for kw in ('if', 'while', 'switch', 'catch', 'else', 'case',
                'if constexpr', 'constexpr'):
         if re.match(rf'(?:^|.*\s){re.escape(kw)}\s*[\({{]', stripped):
             return issues
@@ -703,6 +841,9 @@ def check_rule8_local_var_naming(line: str, lineno: int, raw_line: str) -> list:
                    'namespace', 'template', 'typedef', 'typename', 'goto',
                    'case', 'default', 'delete', 'new', 'throw'}
     if type_name in _SKIP_TYPES:
+        return issues
+    # Skip if the "type" starts with _ (not a real type, it's a variable/expression)
+    if type_name.startswith('_'):
         return issues
     rest = m.group(2)
     # Split by comma for multi-var declarations, respecting braces/parens
@@ -984,10 +1125,19 @@ def lint_file(filepath: str) -> list:
     # Track context: stack of 'class' or 'other' for each brace level
     context_stack = []  # each entry: 'class' or 'other'
     pending_class = False  # True when we've seen class/struct but not yet its {
+    paren_depth = 0  # track unclosed parens for multi-line declarations
 
     for i, raw_line in enumerate(raw_lines, start=1):
         line = _strip_comments_and_strings(raw_line)
         stripped = line.strip()
+
+        # Track parenthesis depth to detect continuation lines
+        is_continuation = paren_depth > 0
+        for ch in stripped:
+            if ch == '(':
+                paren_depth += 1
+            elif ch == ')':
+                paren_depth = max(0, paren_depth - 1)
 
         # Detect class/struct declaration (the { may be on same or next line)
         if re.match(
@@ -1013,14 +1163,19 @@ def lint_file(filepath: str) -> list:
 
         issues.extend(check_rule10_no_tabs(raw_line, i))
         issues.extend(check_rule12_comment_spacing(raw_line, i))
+        issues.extend(check_rule15_std_fabs(line, i, raw_line))
+        issues.extend(check_rule16_false(line, i, raw_line))
         issues.extend(check_rule1_primitive_types(line, i, raw_line))
-        issues.extend(check_rule6_brace_init(line, i, raw_line))
 
-        if in_class_body:
-            issues.extend(check_rule9_member_var_naming(line, i, raw_line))
-            issues.extend(check_rule13_member_pod_init(line, i, raw_line))
-        else:
-            issues.extend(check_rule8_local_var_naming(line, i, raw_line))
+        # Skip variable/declaration checks on continuation lines (multi-line decls)
+        if not is_continuation:
+            issues.extend(check_rule6_brace_init(line, i, raw_line))
+
+            if in_class_body:
+                issues.extend(check_rule9_member_var_naming(line, i, raw_line))
+                issues.extend(check_rule13_member_pod_init(line, i, raw_line))
+            else:
+                issues.extend(check_rule8_local_var_naming(line, i, raw_line))
 
         if _is_function_decl(line):
             issues.extend(check_rule5_func_name(line, i, raw_line))

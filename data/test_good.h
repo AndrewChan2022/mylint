@@ -31,4 +31,8 @@ private:
   Int m_size{0};
 };
 
+static FORCE_INLINE ErrorCode index2dScalar(Int const _row, Int const _col, Int const _nCol)
+{
+}
+
 #endif // _AdvApprox_DichoCutting_HeaderFile

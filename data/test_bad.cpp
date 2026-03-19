@@ -63,8 +63,33 @@ bool AdvApprox_DichoCutting::Value(const double a, const double b, double& cutti
 
   for (Int k = _derivativeOrder; k < 10;  k++)
   {
+
+  }
+  for (Int Col{1}; Col < nCol - 1; Col++)
+  {
+  }
+
+  Int order[2] = {FirstOrder + 1, LastOrder + 1};
+  Int order[2];
+
+  std::fabs(10.0f);
+  Bool _ok = false;
+
+  Int order[2] = {FirstOrder + 1, LastOrder + 1};
+  Int arr[3];
+
+  Int order[2] = {FirstOrder + 1, LastOrder + 1};
+  Int order[2];
+
+  Int aaa;
+
+  for (idim = 0; idim < _dim; idim++)
+  {
     
   }
 
   return (std::abs(b - a) >= 2 * lgmin);
 }
+
+template ErrorCode PolynomialCalculation::noDerivativeEvalPolynomial<3>(
+        Double const _u, Int const _degree) noexcept;
