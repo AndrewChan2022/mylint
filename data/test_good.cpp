@@ -3,7 +3,7 @@
 
 AdvApproxDichoCutting::AdvApproxDichoCutting() = default;
 
-ErrorCode AdvApproxDichoCutting::value(Double const _a, Double const _b, Double& _cuttingValue, Double const* _name, Bool& _result) const
+ErrorCode AdvApproxDichoCutting::value(Double const _a, Double const _b, Double* const _cuttingValue, Double const* _name, Bool* const _result) const
 {
   // Minimum length of an interval for F(U,V): EPS1=1.e-9 (cf. MEPS1)
   constexpr double lgmin{10 * Precision::PConfusion()};

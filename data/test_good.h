@@ -15,16 +15,20 @@ public:
 
   AdvApprox_DichoCutting();
 
-  ErrorCode value(Double const _a, Double const _b, Double& _cuttingValue, Double const* _name, Bool& _result) const override;
+  ErrorCode value(Double const _a, Double const _b, Double* const _cuttingValue, Double const* _name, Bool* const _result) const override;
   ErrorCode value2(Int const _a);
   ErrorCode value3(Int const /* _aaa */);
   virtual ErrorCode toCoefficients(Int const _dim) const = 0;
   ErrorCode value4();
 
+  // return 0;
+  // return 0
+  ErrorCode value5(Double* const _result);
+
 private:
-  Int m_count;
-  Double m_totalValue;
-  Int m_size;
+  Int m_count{0};
+  Double m_totalValue{0.0};
+  Int m_size{0};
 };
 
 #endif // _AdvApprox_DichoCutting_HeaderFile

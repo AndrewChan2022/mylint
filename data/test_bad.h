@@ -24,6 +24,10 @@ public:
 
   void value4();
 
+  // 	return 0;
+  //  return 0
+  void value5(Double& _result);
+
 private:
   Int myCount;
   Double total_value;

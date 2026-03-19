@@ -11,6 +11,11 @@ Rules:
   7. Functions must return `ErrorCode` (not void/int/double/bool).
   8. Local variables must be lowerCamelCase.
   9. Class member variables must begin with `m_` and use lowerCamelCase.
+  10. Use spaces instead of tabs.
+  11. Function output parameters must use pointer, not reference.
+  12. Between `//` and comment content, exactly one space (no tab, no extra spaces).
+  13. Class data members of plain old types must be initialized.
+  14. Output pointer parameters must have `const` on the pointer (e.g. `Type* const _out`).
 """
 
 import re
@@ -84,6 +89,71 @@ def _find_token(raw_line: str, token: str, start: int = 0) -> int:
 # ---------------------------------------------------------------------------
 # Rule checkers — each returns list of (lineno, col, length, message)
 # ---------------------------------------------------------------------------
+
+def check_rule10_no_tabs(raw_line: str, lineno: int) -> list:
+    """Rule 10: use spaces instead of tabs."""
+    issues = []
+    for i, ch in enumerate(raw_line):
+        if ch == '\t':
+            issues.append(
+                (lineno, i, 1, "Rule 10: use spaces instead of tabs")
+            )
+            break  # one issue per line is enough
+    return issues
+
+
+def check_rule12_comment_spacing(raw_line: str, lineno: int) -> list:
+    """Rule 12: between // and comment content, exactly one space."""
+    issues = []
+    # Find // that is not inside a string (simple heuristic: first occurrence)
+    idx = raw_line.find('//')
+    if idx < 0:
+        return issues
+    # Skip if it's a /// (doxygen) or //! (doxygen) — those are fine
+    rest = raw_line[idx + 2:]
+    if not rest:
+        return issues  # empty comment like `//` is fine
+    # Check: if rest starts with '/' or '!' it's a doxygen comment — still check spacing after
+    if rest[0] in ('/', '!'):
+        rest = rest[1:]
+        idx += 1
+        if not rest:
+            return issues
+    # Now rest is everything after // (or //! or ///)
+    # If the rest is all whitespace, it's fine (blank comment line)
+    if not rest.strip():
+        return issues
+    # Check: should be exactly one space then non-space content
+    if rest[0] == '\t':
+        col = idx + 2
+        issues.append(
+            (lineno, col, 1,
+             "Rule 12: use a single space after `//`, not a tab")
+        )
+    elif rest[0] != ' ':
+        # No space at all: //content
+        col = idx + 2
+        issues.append(
+            (lineno, col, 1,
+             "Rule 12: add a space after `//` — e.g. `// comment`")
+        )
+    elif len(rest) >= 2 and rest[1] == ' ':
+        # Multiple spaces: //  content
+        col = idx + 2
+        # Count how many spaces
+        n_spaces = 0
+        for ch in rest:
+            if ch == ' ':
+                n_spaces += 1
+            else:
+                break
+        if n_spaces > 1:
+            issues.append(
+                (lineno, col, n_spaces,
+                 f"Rule 12: use exactly one space after `//`, not {n_spaces}")
+            )
+    return issues
+
 
 def check_rule1_primitive_types(line: str, lineno: int, raw_line: str) -> list:
     """Rule 1: never use bare `int` or `double`, use `Int`/`Double`."""
@@ -255,6 +325,67 @@ def check_rule4_const_pointer(params: list, lineno: int, raw_line: str) -> list:
                  f"Rule 4: const pointer — `const` should be after type, "
                  f"e.g. `Type const* {name or '...'}`")
             )
+    return issues
+
+
+def check_rule11_output_pointer(params: list, lineno: int, raw_line: str) -> list:
+    """Rule 11: output parameters must use pointer, not reference.
+    Non-const reference params like `Type& _name` should be `Type* _name`."""
+    issues = []
+    for param in params:
+        p = param.strip()
+        if not p or '&' not in p:
+            continue
+        # Skip const references — those are input params, not output
+        if re.search(r'\bconst\b', p):
+            continue
+        # Match non-const reference: Type& name  or  Type &name
+        if re.search(r'&', p):
+            name = _extract_param_name(param)
+            if not name:
+                continue
+            col = _find_token(raw_line, '&')
+            if col < 0:
+                col = _find_token(raw_line, name)
+            if col < 0:
+                col = 0
+            issues.append(
+                (lineno, col, 1,
+                 f"Rule 11: output parameter `{name}` should use pointer "
+                 f"instead of reference — e.g. `Type* {name}`")
+            )
+    return issues
+
+
+def check_rule14_output_pointer_const(params: list, lineno: int, raw_line: str) -> list:
+    """Rule 14: output pointer params must have const on the pointer.
+    `Type* _out` should be `Type* const _out`."""
+    issues = []
+    for param in params:
+        p = param.strip()
+        if not p or '*' not in p:
+            continue
+        # Skip input const pointers (const before *): `Type const* _name` or `const Type* _name`
+        # These are input params, Rule 4 handles them
+        if re.match(r'^\s*const\s+\w+\s*\*', p) or re.search(r'\bconst\s*\*', p):
+            continue
+        # Now we have an output pointer like `Type* _name`
+        # Check if it already has `const` after `*`: `Type* const _name`
+        if re.search(r'\*\s+const\b', p) or re.search(r'\*const\b', p):
+            continue
+        name = _extract_param_name(param)
+        if not name:
+            continue
+        col = _find_token(raw_line, '*')
+        if col < 0:
+            col = _find_token(raw_line, name)
+        if col < 0:
+            col = 0
+        issues.append(
+            (lineno, col, 1,
+             f"Rule 14: output pointer `{name}` should have const on pointer "
+             f"— e.g. `Type* const {name}`")
+        )
     return issues
 
 
@@ -646,6 +777,67 @@ def _extract_var_names(line: str) -> list:
     return names
 
 
+_POD_TYPES = {'Int', 'Double', 'Bool', 'int', 'double', 'bool', 'float',
+               'char', 'short', 'long', 'unsigned', 'signed', 'size_t',
+               'Int32', 'Int64', 'UInt32', 'UInt64'}
+
+
+def check_rule13_member_pod_init(line: str, lineno: int, raw_line: str) -> list:
+    """Rule 13: class data members of plain old types must be initialized."""
+    issues = []
+    if not _is_member_var_line(line):
+        return issues
+    stripped = line.strip()
+    # Extract the type
+    m = re.match(
+        r'^(?:(?:static|constexpr|const|volatile|inline|mutable)\s+)*'
+        r'(\w+(?:::\w+)*)\s+'
+        r'(.+?)\s*;',
+        stripped
+    )
+    if not m:
+        return issues
+    type_name = m.group(1)
+    if type_name not in _POD_TYPES:
+        return issues
+    rest = m.group(2)
+    # Split by comma for multi-var declarations
+    vars_list = []
+    depth = 0
+    current = []
+    for ch in rest:
+        if ch in ('(', '{', '<'):
+            depth += 1
+        elif ch in (')', '}', '>'):
+            depth -= 1
+        if ch == ',' and depth == 0:
+            vars_list.append(''.join(current).strip())
+            current = []
+        else:
+            current.append(ch)
+    if current:
+        vars_list.append(''.join(current).strip())
+    for var_part in vars_list:
+        # Check if this var has initialization ({...} or = ...)
+        if '{' in var_part or '=' in var_part:
+            continue
+        vm = re.match(r'([*&\s]*)?(\w+)', var_part)
+        if not vm:
+            continue
+        var_name = vm.group(2)
+        if var_name in ('const', 'volatile', 'override', 'final', 'default', 'delete'):
+            continue
+        col = _find_token(raw_line, var_name)
+        if col < 0:
+            col = 0
+        issues.append(
+            (lineno, col, len(var_name),
+             f"Rule 13: member `{var_name}` of type `{type_name}` must be "
+             f"initialized — e.g. `{type_name} {var_name}{{0}}`")
+        )
+    return issues
+
+
 def check_rule9_member_var_naming(line: str, lineno: int, raw_line: str) -> list:
     """Rule 9: class member variables must begin with m_ and use lowerCamelCase."""
     issues = []
@@ -782,11 +974,14 @@ def lint_file(filepath: str) -> list:
         # Determine if we're directly inside a class body (not nested in a function)
         in_class_body = (len(context_stack) > 0 and context_stack[-1] == 'class')
 
+        issues.extend(check_rule10_no_tabs(raw_line, i))
+        issues.extend(check_rule12_comment_spacing(raw_line, i))
         issues.extend(check_rule1_primitive_types(line, i, raw_line))
         issues.extend(check_rule6_brace_init(line, i, raw_line))
 
         if in_class_body:
             issues.extend(check_rule9_member_var_naming(line, i, raw_line))
+            issues.extend(check_rule13_member_pod_init(line, i, raw_line))
         else:
             issues.extend(check_rule8_local_var_naming(line, i, raw_line))
 
@@ -797,6 +992,8 @@ def lint_file(filepath: str) -> list:
             issues.extend(check_rule2_param_naming(params, i, raw_line))
             issues.extend(check_rule3_const_after_type_value(params, i, raw_line))
             issues.extend(check_rule4_const_pointer(params, i, raw_line))
+            issues.extend(check_rule11_output_pointer(params, i, raw_line))
+            issues.extend(check_rule14_output_pointer_const(params, i, raw_line))
 
     return issues, raw_lines
 

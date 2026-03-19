@@ -32,6 +32,8 @@ rules:
     10. all variable should be littel camel
     11. class memeber variable begin with m_littleCamelCase
     12. constexpr variable can start with upper case
+    13. use space instead of tab
+    14. func para use pointer for output, not use reference for output
 ```
 
 
@@ -73,5 +75,9 @@ others:
 11. any function inside class with void nee change to ErrorCode :  void value4(); => ErrorCode value4();
 12. void detect:  miss virtual void toCoefficients(Int const _dim) const = 0;
 13. case 0: 0 is not variable
+14. bug: DataArray<Double> hermitValues(nHer * nBer);
+15: bug: DataArray<Double> jac0(jacDegree), jac1(aaa);
+16: bug: delete m_jacobi;
+17: constexpr variable can start with upper case
 ```
 
